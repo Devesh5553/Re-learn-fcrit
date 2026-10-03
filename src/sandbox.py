@@ -69,14 +69,29 @@ try:
 except Exception:
     num_params = 1
 
+import copy
+
 for inp, exp in zip(inputs, expected):
     try:
+        orig_inp = copy.deepcopy(inp)
         if num_params > 1 and isinstance(inp, (list, tuple)) and len(inp) == num_params:
-            res = target_func(*inp)
+            call_inp = copy.deepcopy(inp)
+            res = target_func(*call_inp)
+            mutated = (call_inp != orig_inp)
+            aliased = any(res is arg for arg in call_inp if isinstance(arg, (list, dict, set)))
         else:
-            res = target_func(inp)
+            call_inp = copy.deepcopy(inp)
+            res = target_func(call_inp)
+            mutated = (call_inp != orig_inp)
+            aliased = (res is call_inp and isinstance(call_inp, (list, dict, set)))
         actual.append(res)
-        passed.append(res == exp)
+        
+        # In double_each and add_item, the specification requires returning a new list without mutating the original input
+        func_name = getattr(target_func, '__name__', '')
+        if func_name in ('double_each', 'add_item') and (mutated or aliased):
+            passed.append(False)
+        else:
+            passed.append(res == exp)
     except Exception as exc:
         actual.append(f"RuntimeError: {{type(exc).__name__}}: {{exc}}")
         passed.append(False)
